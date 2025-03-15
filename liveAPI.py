@@ -53,6 +53,10 @@ class AudioLoop:
         self.play_audio_task = None
 
     async def send_text(self):
+        system_prompt = "You are a helpful assistant. Engage in a relaxed and natural conversation. " \
+        "Do not repeatedly ask if the user has a problem unless it is explicitly mentioned. Start your conversation by saying hello."
+        await self.session.send(input=system_prompt, end_of_turn=True)
+
         while True:
             text = await asyncio.to_thread(
                 input,
