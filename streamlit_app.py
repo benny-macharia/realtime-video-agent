@@ -311,7 +311,6 @@ def main():
     
     # Settings
     with st.expander("Settings", expanded=not st.session_state.app_running):
-        # Use form to ensure consistent alignment
         with st.container():
             # Video mode
             video_mode = st.selectbox(
@@ -339,7 +338,6 @@ def main():
                     st.session_state.app = None
                     st.rerun()
     
-    # Video feed in a contained size
     if st.session_state.app_running and video_mode != "none":
         st.markdown("#### Video Feed")
         cols = st.columns([1, 2, 1])
