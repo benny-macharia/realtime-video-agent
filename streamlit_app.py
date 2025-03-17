@@ -17,13 +17,11 @@ import mss
 
 from google import genai
 
-# Import backports for Python < 3.11
 if sys.version_info < (3, 11, 0):
     import taskgroup, exceptiongroup
     asyncio.TaskGroup = taskgroup.TaskGroup
     asyncio.ExceptionGroup = exceptiongroup.ExceptionGroup
 
-# Audio/video constants
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 SEND_SAMPLE_RATE = 16000
@@ -32,7 +30,6 @@ CHUNK_SIZE = 1024
 MODEL = "models/gemini-2.0-flash-exp"
 CONFIG = {"response_modalities": ["AUDIO"]}
 
-# Initialize Google client
 client = genai.Client(http_options={"api_version": "v1alpha"})
 pya = pyaudio.PyAudio()
 
@@ -42,12 +39,10 @@ class StreamlitGeminiLive:
         self.running = False
         self.session = None
         
-        # Queues for communication
         self.audio_in_queue = queue.Queue()
         self.out_queue = queue.Queue(maxsize=5)
         self.response_queue = queue.Queue()
         
-        # Tracking state
         self.current_frame = None
         self.audio_stream = None
         self.threads = []
@@ -62,12 +57,10 @@ class StreamlitGeminiLive:
             
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         img = PIL.Image.fromarray(frame_rgb)
-        img.thumbnail([640, 480])  # Smaller for display
+        img.thumbnail([640, 480]) 
         
-        # For display in Streamlit
         display_frame = np.array(img)
         
-        # For sending to model
         image_io = io.BytesIO()
         img.save(image_io, format="jpeg")
         image_io.seek(0)
@@ -131,7 +124,7 @@ class StreamlitGeminiLive:
                             self.out_queue.put(model_frame)
                             self.last_frame_sent = current_time
                 
-                # Sleep for a short time to get smoother video (30 FPS approx)
+                # Sleep for a short time to get smoother video (30 FPS)
                 time.sleep(0.03)
     
     def capture_audio_thread(self):
@@ -228,11 +221,9 @@ class StreamlitGeminiLive:
                                 "Start your conversation by saying hello.")
                 await self.session.send(input=system_prompt, end_of_turn=True)
                 
-                # Start tasks for sending/receiving data
                 send_task = asyncio.create_task(self.send_data_task())
                 receive_task = asyncio.create_task(self.receive_responses_task())
                 
-                # Wait until not running
                 while self.running:
                     await asyncio.sleep(0.1)
                     
@@ -269,7 +260,6 @@ class StreamlitGeminiLive:
         audio_playback_thread.start()
         self.threads.append(audio_playback_thread)
         
-        # Start async session in a separate thread
         def run_async_loop():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -284,7 +274,6 @@ class StreamlitGeminiLive:
         """Stop all threads and async tasks"""
         self.running = False
         
-        # Let threads terminate naturally
         for thread in self.threads:
             if thread.is_alive():
                 thread.join(timeout=1.0)
@@ -297,9 +286,33 @@ class StreamlitGeminiLive:
             self.audio_stream = None
 
 def main():
-    st.set_page_config(page_title="Gemini Live Assistant", layout="centered")
+    st.set_page_config(
+        page_title="Gemini Live Assistant", 
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
     
-    # Init session state
+    st.markdown("""
+    <style>
+    section[data-testid="stSidebar"] {
+        width: 250px !important;
+        left: 0;
+        position: fixed;
+    }
+    .main-content {
+        margin-left: 250px;
+        padding: 1rem;
+    }
+    .video-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 1rem auto;
+        max-width: 640px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     if 'messages' not in st.session_state:
         st.session_state.messages = []
     if 'app_running' not in st.session_state:
@@ -307,54 +320,81 @@ def main():
     if 'app' not in st.session_state:
         st.session_state.app = None
     
-    st.markdown("### Gemini Live Assistant")
-    
-    # Settings
-    with st.expander("Settings", expanded=not st.session_state.app_running):
-        with st.container():
-            # Video mode
-            video_mode = st.selectbox(
-                "Video Input Mode",
-                options=["camera", "screen", "none"],
-                index=0,
-                disabled=st.session_state.app_running
-            )
-            
-            st.write("")
-            
-            # controls
-            if not st.session_state.app_running:
-                if st.button("Start Session", type="primary", use_container_width=True):
-                    st.session_state.app = StreamlitGeminiLive(video_mode=video_mode)
-                    st.session_state.app.start()
-                    st.session_state.app_running = True
-                    st.session_state.messages = []
-                    st.rerun()
-            else:
-                if st.button("Stop Session", type="secondary", use_container_width=True):
-                    if st.session_state.app:
-                        st.session_state.app.stop()
-                    st.session_state.app_running = False
-                    st.session_state.app = None
-                    st.rerun()
-    
-    if st.session_state.app_running and video_mode != "none":
-        st.markdown("#### Video Feed")
-        cols = st.columns([1, 2, 1])
-        video_placeholder = cols[1].empty()
+    with st.sidebar:
+        st.title("Gemini Live Assistant")
+        st.markdown("### Settings")
         
-        app = st.session_state.app
-        if app.current_frame is not None:
-            video_placeholder.image(app.current_frame, channels="RGB", use_container_width=True)
+        # mode selection
+        video_mode = st.selectbox(
+            "Video Input Mode",
+            options=["camera", "screen", "none"],
+            index=0,
+            disabled=st.session_state.app_running,
+            help="Select the video input source"
+        )
+
+        st.markdown("### About")
+        st.markdown("""
+        This application uses Google's Gemini model to create a live 
+        video assistant that can see, hear, and respond to you in real-time.
+        
+        - **Camera mode**: Uses your webcam
+        - **Screen mode**: Captures your screen
+        - **None**: Audio only
+        """)
+        
+        st.markdown("### Controls")
+        if not st.session_state.app_running:
+            if st.button("Start Session", type="primary", use_container_width=True):
+                st.session_state.app = StreamlitGeminiLive(video_mode=video_mode)
+                st.session_state.app.start()
+                st.session_state.app_running = True
+                st.session_state.messages = []
+                st.rerun()
+        else:
+            session_status = st.success("Session Active")
+            if st.button("Stop Session", type="secondary", use_container_width=True):
+                if st.session_state.app:
+                    st.session_state.app.stop()
+                st.session_state.app_running = False
+                st.session_state.app = None
+                st.rerun()
     
-    if st.session_state.app_running and st.session_state.app:
-        if not st.session_state.app.response_queue.empty():
-            response = st.session_state.app.response_queue.get()
-            st.session_state.messages.append({"role": "assistant", "content": response})
+    st.markdown('<div class="main-content">', unsafe_allow_html=True)
+    st.markdown("## Gemini Live Assistant")
     
+    main_container = st.container()
+    with main_container:
+        if st.session_state.app_running:
+            if video_mode != "none" and st.session_state.app:
+                st.markdown('<div class="video-container">', unsafe_allow_html=True)
+                if st.session_state.app.current_frame is not None:
+                    st.image(
+                        st.session_state.app.current_frame, 
+                        channels="RGB", 
+                        use_container_width=True,
+                        caption="Live Video Feed"
+                    )
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            if st.session_state.app and not st.session_state.app.response_queue.empty():
+                response = st.session_state.app.response_queue.get()
+                st.session_state.messages.append({"role": "assistant", "content": response})
+        else:
+            # when not running
+            st.info("Start a session using the controls in the sidebar to begin.")
+            st.markdown("""
+            ### How to use:
+            1. Select your preferred video input mode in the sidebar
+            2. Click "Start Session" to begin
+            3. Interact with the Gemini assistant through voice and video
+            """)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # refresh when running
     if st.session_state.app_running:
-        refresh_placeholder = st.empty()
-        time.sleep(0.1)  
+        time.sleep(0.1)
         st.rerun()
 
 if __name__ == "__main__":
